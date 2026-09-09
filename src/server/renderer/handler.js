@@ -152,7 +152,7 @@ const renderToStringWithObservability = withSyncObservability(
 )
 
 // Internal recursive implementation — called directly to avoid creating a new span on each recursion.
-const _getMatchRoutes = (routes, req, res, store, context, fetcherData, basePath = "") => {
+const _getMatchRoutes = (routes, req, res, store, context, fetcherData, basePath = "", nonce) => {
     return routes.reduce((matches, route) => {
         const { path } = route
         const match = matchPath(
@@ -166,7 +166,7 @@ const _getMatchRoutes = (routes, req, res, store, context, fetcherData, basePath
                 // Phase 1a: try to serve CSS/preloadLinks from the extractor cache (production only).
                 // On a cache hit, res.locals.pageCss and preloadJSLinks are populated and
                 // the renderToString dry-run below is skipped entirely for this request.
-                extractAssets(res, route)
+                extractAssets(res, route, nonce)
             }
 
             // Production: reuses the same ChunkExtractor per route (chunks accumulate over time).
@@ -196,7 +196,8 @@ const _getMatchRoutes = (routes, req, res, store, context, fetcherData, basePath
                 store,
                 context,
                 fetcherData,
-                `${basePath}/${path}`
+                `${basePath}/${path}`,
+                nonce
             )
             if (nested.length) {
                 matches = matches.concat(nested)
@@ -398,7 +399,7 @@ async function _handler(req, res) {
 
         // matches: routes that exactly match this URL — used for serverSideFunction execution.
         // allMatches: full nested match tree — used by getMetaData to collect meta tags.
-        const matches = getMatchRoutes(routes, req, res, store, context, fetcherData)
+        const matches = getMatchRoutes(routes, req, res, store, context, fetcherData, "", nonce)
         const allMatches = NestedMatchRoutes(routes, req.baseUrl)
         let allTags = []
 

@@ -1,3 +1,4 @@
+import React from "react"
 import path from "path"
 import fs from "fs"
 import { withSyncObservability } from "../../otel"
@@ -6,6 +7,17 @@ import { withSyncObservability } from "../../otel"
 const BYTES_PER_MB = 1_000_000
 const toMB = (bytes) => (bytes / BYTES_PER_MB).toFixed(2)
 const SSR_SERVICE = process.env.SERVICE_NAME || `pwa-${process.env.APPLICATION}-node-server-otel`
+
+export const generateModulePreloadLinkElements = (jsUrls = [], keyPrefix = "modulepreload", nonce) =>
+    [...new Set(jsUrls)].map((url, i) =>
+        React.createElement("link", {
+            key: `${keyPrefix}-${i}`,
+            rel: "modulepreload",
+            href: url,
+            fetchPriority: "high",
+            ...(nonce ? { nonce } : {}),
+        })
+    )
 
 /**
  * Caches CSS file content (shared across all routes)
@@ -52,7 +64,7 @@ function cacheCSS(assetName, assetPath) {
  * @param {string} routePath - Route path
  * @returns {object} { css: string, preloadJSLinks: array } or null if not cached
  */
-function getAssetsFromCachedExtractor(routePath) {
+function getAssetsFromCachedExtractor(routePath, nonce) {
     const isProd = process.env.NODE_ENV === "production"
 
     // Only use cached extractor in production
@@ -68,7 +80,10 @@ function getAssetsFromCachedExtractor(routePath) {
         return null
     }
 
-    const preloadJSLinks = linkElements.filter((asset) => asset?.props?.as === "script")
+    const preloadJSUrls = linkElements
+        .filter((asset) => asset?.props?.as === "script")
+        .map((asset) => asset?.props?.href)
+    const preloadJSLinks = generateModulePreloadLinkElements(preloadJSUrls, "modulepreload", nonce)
 
     const cssAssets = linkElements.filter((e) => {
         const href = e?.props?.href
@@ -172,10 +187,10 @@ export const cacheAndFetchAssets = withSyncObservability(
  */
 export default withSyncObservability(
     SSR_SERVICE,
-    function extractAssets(res, route) {
+    function extractAssets(res, route, nonce) {
         try {
             const routePath = route.path
-            const cached = getAssetsFromCachedExtractor(routePath)
+            const cached = getAssetsFromCachedExtractor(routePath, nonce)
 
             if (cached && (cached.css || cached.preloadJSLinks)) {
                 res.locals.pageCss = cached.css
